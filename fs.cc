@@ -1,5 +1,6 @@
 #include "fs.h"
 #include <cmath>
+#include <algorithm>
 
 int INE5412_FS::fs_format()
 {
@@ -11,7 +12,7 @@ int INE5412_FS::fs_format()
 
 	// Calculate block distribution 
 	int total_blocks = disk->size();
-	int inode_blocks = static_cast<int>(std::ceil(total_blocks * 0.1));
+	int inode_blocks = static_cast<int>(ceil(total_blocks * 0.1));
 
 	// Reserving ten percent of blocks to inodes
 	superblock.ninodeblocks = inode_blocks;
@@ -257,7 +258,67 @@ int INE5412_FS::fs_getsize(int inumber)
 
 int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 {
-	return 0;
+	if (!mounted) {
+        cout << "Error: File system is not mounted.\n";
+        return -1; 
+    }
+
+	// Check if the given inode number is valid
+	if (inumber <= 0 || inumber > superblock.ninodes) {
+		cout << "Error: Invalid inode number.\n";
+		return 0;
+	}
+
+	// Read the inode block containing the target inode
+	fs_block inodeBlock = read_block(1 + (inumber - 1) / INODES_PER_BLOCK);
+	fs_inode *inode = &inodeBlock.inode[(inumber - 1) % INODES_PER_BLOCK];
+
+	// Check if the inode is valid
+	if (!inode->isvalid) {
+		cout << "Error: Inode is not valid.\n";
+		return 0;
+	}
+
+	// Check if the offset is within the valid range
+	if (offset < 0 || offset >= inode->size) {
+		cout << "Error: Invalid offset.\n";
+		return 0;
+	}
+
+	// Calculate the effective lenght to read (considering the end of the inode)
+	int effectiveLength = min(length, inode->size - offset);
+	
+	// Read data from the inode starting at the offset
+	int bytesRead = 0;
+
+	while (bytesRead < effectiveLength) {
+		// Calculate the block index and position within the block
+		int blockIndex = (offset + bytesRead) / Disk::DISK_BLOCK_SIZE;
+		int blockOffset = (offset + bytesRead) % Disk::DISK_BLOCK_SIZE;
+
+		// Read the block containing the data
+		fs_block dataBlock;
+
+		if (blockIndex < POINTERS_PER_INODE) {
+			// Direct block
+			disk->read(inode->direct[blockIndex], dataBlock.data);
+		} else {
+			// Indirect block
+			int indirectIndex = blockIndex - POINTERS_PER_INODE;
+			disk->read(inode->indirect, dataBlock.data);
+			disk->read(dataBlock.pointers[indirectIndex], dataBlock.data);
+		}
+
+		// Copy data from the block to the provided data pointer
+		int bytesToCopy = min(effectiveLength - bytesRead, Disk::DISK_BLOCK_SIZE - blockOffset);
+		for (int i = 0; i < bytesToCopy; i++) {
+			data[bytesRead + 1] = dataBlock.data[blockOffset + 1];
+		}
+		
+		// Update the bytesRead counter
+		bytesRead += bytesToCopy;
+	}
+	return bytesRead;
 }
 
 int INE5412_FS::fs_write(int inumber, const char *data, int length, int offset)
