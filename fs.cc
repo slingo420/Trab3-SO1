@@ -60,9 +60,15 @@ void INE5412_FS::fs_debug()
 
 			cout << "inode " << (i-1)*INODES_PER_BLOCK + j + 1 << ":\n" << spaces << "size: " << inode.size << " bytes\n" << spaces << "direct blocks: ";
 
-			for (int k = 0; k < this->POINTERS_PER_INODE; ++k)
-				if (inode.direct[k])
+			bool has_direct_block = false;
+			for (int k = 0; k < this->POINTERS_PER_INODE; ++k) {
+				if (inode.direct[k]) {
 					cout << inode.direct[k] << ' ';
+					has_direct_block = true;
+				}
+			}
+
+			if (!has_direct_block) cout << '-';
 			
 			cout << "\n" << spaces << "indirect block: " << ((inode.indirect) ? to_string(inode.indirect) : "-") << "\n" << spaces << "indirect data blocks: ";
 
@@ -152,6 +158,10 @@ int INE5412_FS::fs_create() {
     fs_inode *inode = &inodeBlock.inode[(freeInode - 1) % INODES_PER_BLOCK];
     inode->isvalid = 1; // Mark the inode as valid
     inode->size = 0;    // New inode with zero length
+
+	for (int i = 0; i < POINTERS_PER_INODE; ++i)
+		inode->direct[i] = 0;
+	inode->indirect = 0;
 
     // Write the updated inode block back to disk
     disk->write(1 + (freeInode - 1) / INODES_PER_BLOCK, inodeBlock.data);
