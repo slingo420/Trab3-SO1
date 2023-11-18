@@ -281,7 +281,6 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 
 	// Check if the offset is within the valid range
 	if (offset < 0 || offset >= inode->size) {
-		cout << "Error: Invalid offset.\n";
 		return 0;
 	}
 
@@ -312,11 +311,8 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 		// Copy data from the block to the provided data pointer
 		int bytesToCopy = min(effectiveLength - bytesRead, Disk::DISK_BLOCK_SIZE - blockOffset);
 		for (int i = 0; i < bytesToCopy; i++) {
-			data[bytesRead + 1] = dataBlock.data[blockOffset + 1];
-		}
-		
-		// Update the bytesRead counter
-		bytesRead += bytesToCopy;
+			data[bytesRead++] = dataBlock.data[blockOffset++];
+		}	
 	}
 	return bytesRead;
 }
