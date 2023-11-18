@@ -260,7 +260,7 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 {
 	if (!mounted) {
         cout << "Error: File system is not mounted.\n";
-        return -1; 
+        return 0; 
     }
 
 	// Check if the given inode number is valid
@@ -323,5 +323,125 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 
 int INE5412_FS::fs_write(int inumber, const char *data, int length, int offset)
 {
+	if (!mounted) {
+        cout << "Error: File system is not mounted.\n";
+        return 0; 
+    }
+
+	// Check if the given inode number is valid
+	if (inumber <= 0 || inumber > superblock.ninodes) {
+		cout << "Error: Invalid inode number.\n";
+		return 0;
+	}
+
+	// Read the inode block containing the target inode
+	fs_block inodeBlock = read_block(1 + (inumber - 1) / INODES_PER_BLOCK);
+	fs_inode *inode = &inodeBlock.inode[(inumber - 1) % INODES_PER_BLOCK];
+
+	// Check if the inode is valid
+	if (!inode->isvalid) {
+		cout << "Error: Inode is not valid.\n";
+		return 0;
+	}
+
+	// Check if the offset is within the valid range
+	if (offset < 0 || offset > inode->size) {
+		cout << "Error: Invalid offset.\n";
+		return 0;
+	}
+
+	// Calculate the effective lenght to read (considering the end of the inode)
+	int effectiveLength = min(length, Disk::DISK_BLOCK_SIZE * (POINTERS_PER_INODE + POINTERS_PER_BLOCK) - offset);
+	
+	// Write data from the inode starting at the offset
+	int bytesWritten = 0;
+
+	while (bytesWritten < effectiveLength) {
+		// Calculate the block index and position within the block
+		int blockIndex = (offset + bytesWritten) / Disk::DISK_BLOCK_SIZE;
+		int blockOffset = (offset + bytesWritten) % Disk::DISK_BLOCK_SIZE;
+
+		// Check if a new block needs to be allocated
+		if (blockIndex < POINTERS_PER_INODE && inode->direct[blockIndex] == 0) {
+			// Allocate a new direct block
+			int newBlock = find_free_iblock();
+			if (newBlock == 0) {
+				// Disk is full, return total bytes written so far
+				return bytesWritten;
+			}
+			inode->direct[blockIndex] = newBlock;
+			free_blocks[newBlock] = false;
+		} else if (blockIndex >= POINTERS_PER_INODE && inode->indirect == 0) {
+			// Allocate a new indirect block
+			int newBlock = find_free_iblock();
+			if (newBlock == 0) {
+				// Disk is full, return total bytes written so far
+				return bytesWritten;
+			}
+			inode->indirect = newBlock;
+			free_blocks[newBlock] = false;
+
+			// Initialize the indirect block
+			fs_block indirectBlock;
+			for (int i = 0; i < POINTERS_PER_BLOCK; ++i) {
+				indirectBlock.pointers[i] = 0;
+			}
+			disk->write(inode->indirect, indirectBlock.data);
+		}
+
+		// Read the block containing the data
+		fs_block dataBlock;
+
+		if (blockIndex < POINTERS_PER_INODE) {
+			// Direct block
+			disk->read(inode->direct[blockIndex], dataBlock.data);
+		} else {
+			// Indirect block
+			disk->read(inode->indirect, dataBlock.data);
+			disk->read(dataBlock.pointers[blockIndex - POINTERS_PER_INODE], dataBlock.data);
+		}
+
+		// Copy data from the provided data pointer to the block
+		int bytesToCopy = min(effectiveLength - bytesWritten, Disk::DISK_BLOCK_SIZE - blockOffset);
+
+		for (int i = 0; i < bytesToCopy; ++i) {
+			dataBlock.data[blockOffset + i] = data[bytesWritten + 1];
+		}
+
+		// Write the block back to the disk
+		if (blockIndex < POINTERS_PER_INODE) {
+			// Direct block
+			disk->write(inode->direct[blockIndex], dataBlock.data);
+		} else {
+			// Indirect block
+			disk->write(dataBlock.pointers[blockIndex - POINTERS_PER_INODE], dataBlock.data);
+		}
+
+		// Update the bytesWritten counter
+		bytesWritten += bytesToCopy;
+	}
+
+	// Update the inode size if needed
+	if (offset + bytesWritten > inode->size) {
+		inode->size = offset + bytesWritten;
+	}
+
+	// Write the updated inode back to the disk
+	disk->write(1 + (inumber - 1) / INODES_PER_BLOCK, inodeBlock.data);
+
+	// Return the total number of bytes written
+	return bytesWritten;
+}
+
+int INE5412_FS::find_free_iblock() {
+	// Find a free block in the bitmap
+	for (int i = superblock.ninodeblocks + 1; i < superblock.nblocks; ++i) {
+		if (free_blocks[i]) {
+			free_blocks[i] = false;
+			return i;
+		}
+	}
+
+	// No free block found
 	return 0;
 }
