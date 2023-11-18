@@ -64,7 +64,7 @@ void INE5412_FS::fs_debug()
 				if (inode.direct[k])
 					cout << inode.direct[k] << ' ';
 			
-			cout << "\n" << spaces << "indirect block: " << ((inode.indirect) ? inode.indirect : '-') << "\n" << spaces << "indirect data blocks: ";
+			cout << "\n" << spaces << "indirect block: " << ((inode.indirect) ? to_string(inode.indirect) : "-") << "\n" << spaces << "indirect data blocks: ";
 
 			if (!inode.indirect) {
 				cout << "-\n";
@@ -312,7 +312,8 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset)
 		int bytesToCopy = min(effectiveLength - bytesRead, Disk::DISK_BLOCK_SIZE - blockOffset);
 		for (int i = 0; i < bytesToCopy; i++) {
 			data[bytesRead++] = dataBlock.data[blockOffset++];
-		}	
+		}
+	
 	}
 	return bytesRead;
 }
@@ -401,7 +402,7 @@ int INE5412_FS::fs_write(int inumber, const char *data, int length, int offset)
 		int bytesToCopy = min(effectiveLength - bytesWritten, Disk::DISK_BLOCK_SIZE - blockOffset);
 
 		for (int i = 0; i < bytesToCopy; ++i) {
-			dataBlock.data[blockOffset + i] = data[bytesWritten + 1];
+			dataBlock.data[blockOffset++] = data[bytesWritten++];
 		}
 
 		// Write the block back to the disk
@@ -412,9 +413,6 @@ int INE5412_FS::fs_write(int inumber, const char *data, int length, int offset)
 			// Indirect block
 			disk->write(dataBlock.pointers[blockIndex - POINTERS_PER_INODE], dataBlock.data);
 		}
-
-		// Update the bytesWritten counter
-		bytesWritten += bytesToCopy;
 	}
 
 	// Update the inode size if needed
