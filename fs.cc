@@ -100,7 +100,7 @@ int INE5412_FS::fs_mount()
 	}
 
 	// Build a bitmap of free blocks
-	vector<bool> free_blocks(superblock.nblocks, true); // Assume all blocks are ionitially free
+	free_blocks.assign(superblock.nblocks, true); // Assume all blocks are ionitially free
 
 	// Mark inode blocks as used
 	for (int i = 1; i <= superblock.ninodeblocks; ++i) {
@@ -205,18 +205,18 @@ int INE5412_FS::fs_delete(int inumber)
 	for (int i = 0; i < POINTERS_PER_INODE; i++) {
 		if (inode->direct[i]) {
 			// Free the direct block
-			free_blocks[inode->direct[i]] = false;
+			free_blocks[inode->direct[i]] = true;
 		}
 	}
 	if (inode->indirect) {
 		// Free the indirect block
-		free_blocks[inode->indirect] = false;
+		free_blocks[inode->indirect] = true;
 
 		// Free data blocks pointed by the indirect block
 		fs_block indirectBlock = read_block(inode->indirect);
 		for (int i = 0; i < POINTERS_PER_BLOCK; ++i) {
 			if (indirectBlock.pointers[i]) {
-				free_blocks[indirectBlock.pointers[i]] = false;
+				free_blocks[indirectBlock.pointers[i]] = true;
 			}
 		}
 	}
