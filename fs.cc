@@ -125,6 +125,7 @@ int INE5412_FS::fs_mount()
 					}
 				}
 				if (inode.indirect) {
+					free_blocks[inode.indirect] = false;
 					fs_block indirect_block = read_block(inode.indirect);
 					for (int k = 0; k < POINTERS_PER_BLOCK; ++k) {
 						if (indirect_block.pointers[k]) {
