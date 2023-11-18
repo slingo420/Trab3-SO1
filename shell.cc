@@ -73,6 +73,16 @@ int main( int argc, char *argv[] )
 			} else {
 				cout << "use: mount\n";
 			}
+		} else if (!strcmp(cmd, "umount")){
+			if (args == 1) {
+				if (fs.fs_umount()) {
+					cout << "disk umounted.\n";
+				} else {
+					cout << "umount failed!\n";
+				}
+			} else {
+				cout << "use: umount\n";
+			}
 		} else if(!strcmp(cmd, "debug")) {
 			if(args == 1) {
 				fs.fs_debug();
@@ -152,6 +162,8 @@ int main( int argc, char *argv[] )
 			cout << "Commands are:\n";
 			cout << "    format\n";
 			cout << "    mount\n";
+			cout << "    umount\n";
+			cout << "    getsize <inode>\n";
 			cout << "    debug\n";
 			cout << "    create\n";
 			cout << "    delete  <inode>\n";

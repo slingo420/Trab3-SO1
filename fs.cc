@@ -140,6 +140,17 @@ int INE5412_FS::fs_mount()
 	return 1; // Return success
 }
 
+int INE5412_FS::fs_umount() {
+	if (!mounted) {
+		cout << "Error: filesystem is already umounted.\n";
+		return 0;
+	}
+
+	mounted = false;
+	free_blocks.clear();
+	return 1;
+}
+
 int INE5412_FS::fs_create() {
     if (!mounted) {
         cout << "Error: File system is not mounted.\n";
