@@ -94,7 +94,7 @@ private:
                         : inode->indirect;
         
         if (blockIndex >= POINTERS_PER_INODE) {
-            if (!indirect_block_ptr) {
+            if (!(*indirect_block_ptr)) {
                 fs_block indirect = read_block(inode->indirect);
                 *indirect_block_ptr = new int[POINTERS_PER_BLOCK];
                 for (int i = 0; i < POINTERS_PER_BLOCK; ++i)
