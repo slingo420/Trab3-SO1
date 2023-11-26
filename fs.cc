@@ -108,8 +108,8 @@ int INE5412_FS::fs_mount()
 	// Build a bitmap of free blocks
 	free_blocks.assign(superblock.nblocks, true); // Assume all blocks are ionitially free
 
-	// Mark inode blocks as used
-	for (int i = 1; i <= superblock.ninodeblocks; ++i) {
+	// Mark superblock and inode blocks as used
+	for (int i = 0; i <= superblock.ninodeblocks; ++i) {
 		free_blocks[i] = false;
 	}
 
@@ -338,62 +338,125 @@ int INE5412_FS::fs_write(int inumber, const char *data, int length, int offset)
 	
 	// Write data from the inode starting at the offset
 	int bytesWritten = 0;
+	
+	bool willNeedIndirectBlock = (offset + effectiveLength)/Disk::DISK_BLOCK_SIZE > POINTERS_PER_INODE;
+	
+	fs_block *indirect_block;
+	
+	if (!willNeedIndirectBlock) {
+		indirect_block = nullptr;
+	} else if (inode->indirect) {
+		indirect_block = new fs_block;
+		disk->read(inode->indirect, indirect_block->data);
+	} else {
+		if (!allocate_indirect_block(inode)) {
+			cout << "Error: Disk Full!!\n";
+			return bytesWritten;
+		}
+		indirect_block = new fs_block;
+		disk->read(inode->indirect, indirect_block->data);
+	}
+	
 	while (bytesWritten < effectiveLength) {
 		// Calculate the block index and position within the block
 		int blockOffset = (offset + bytesWritten) % Disk::DISK_BLOCK_SIZE;
 		int blockIndex = (offset + bytesWritten) / Disk::DISK_BLOCK_SIZE;
 
+		// number of the block that will be written to.
+		// we only allocate a new block if theres no block already allocated  here.
+		int allocated_block_index = (blockIndex < POINTERS_PER_INODE)
+							? inode->direct[blockIndex]
+							: indirect_block->pointers[blockIndex - POINTERS_PER_INODE];
+		
+		int newBlock = (allocated_block_index == 0)
+							? allocate_data_block(inode, blockIndex, &indirect_block)
+							: allocated_block_index;
+		
+		if (!newBlock) {
+			cout << "Error: Disk Full!!\n";
+			break;
+		}
     
-    int newBlock = find_free_iblock();
-    if (!newBlock) {
-      return bytesWritten;
-    }
-    
-    free_blocks[newBlock] = false;
-    
-		// Check if newBlock is direct
-		if (blockIndex < POINTERS_PER_INODE && inode->direct[blockIndex] == 0) {
-      inode->direct[blockIndex] = newBlock;
-    } else {
-      fs_block indirectBlock;
-			for (int i = 0; i < POINTERS_PER_BLOCK; ++i) {
-				indirectBlock.pointers[i] = 0;
-			}
-			disk->write(inode->indirect, indirectBlock.data);
-    }
 
-
+		int bytesToCopy = min(effectiveLength - bytesWritten, Disk::DISK_BLOCK_SIZE - blockOffset);
 		// create the block containing the data
 		fs_block dataBlock;
-
 		// Copy data from the provided data pointer to the block
-		int bytesToCopy = min(effectiveLength - bytesWritten, Disk::DISK_BLOCK_SIZE - blockOffset);
-
 		for (int i = 0; i < bytesToCopy; ++i) {
 			dataBlock.data[blockOffset++] = data[bytesWritten++];
 		}
 
-		// Write the block back to the disk
-		if (blockIndex < POINTERS_PER_INODE) {
-			// Direct block
-			disk->write(inode->direct[blockIndex], dataBlock.data);
-		} else {
-			// Indirect block
-			disk->write(dataBlock.pointers[blockIndex - POINTERS_PER_INODE], dataBlock.data);
-		}
+		// write the allocated block to disk.
+		disk->write(newBlock, dataBlock.data);
+
 	}
 
-
-	// Update the inode size if needed
-	if (offset + bytesWritten > inode->size) {
+	// update inode size if necessary
+	if (offset + bytesWritten >  inode->size)
 		inode->size = offset + bytesWritten;
-	}
 
 	// Write the updated inode back to the disk
 	disk->write(find_inode_block(inumber), inodeBlock.data);
 
+	// if an indirect block was used, write it to disk and delete the pointer
+	if (indirect_block) {
+		disk->write(inode->indirect, indirect_block->data);
+		delete indirect_block;
+	}
+
+
 	// Return the total number of bytes written
 	return bytesWritten;
+}
+
+
+int INE5412_FS::allocate_indirect_block(INE5412_FS::fs_inode *inode) {
+	int num_indirect_block;
+	if (! (num_indirect_block = find_free_iblock() ) )
+		return 0;
+	
+	free_blocks[num_indirect_block] = false;
+
+	inode->indirect = num_indirect_block;
+	fs_block indirect;
+
+	for (int i = 0; i < POINTERS_PER_BLOCK; ++i) 
+		indirect.pointers[i] = 0;
+	
+	disk->write(num_indirect_block, indirect.data);
+	return num_indirect_block;
+}
+
+int INE5412_FS::allocate_data_block(INE5412_FS::fs_inode *inode, int block_index, INE5412_FS::fs_block **indirect_block) {
+	
+	// find free block that will have data written to it.
+	int new_block;
+	if (! (new_block = find_free_iblock() ) )
+		return 0;
+	
+	free_blocks[new_block] = false;
+
+
+	if (block_index < POINTERS_PER_INODE) {
+		inode->direct[block_index] = new_block;
+	} else {
+		// if inode has no indirect block, allocate one.
+		if (!inode->indirect) {
+			allocate_indirect_block(inode);
+			if (!inode->indirect) 
+				return 0;
+			
+			if (!(*indirect_block))
+				*indirect_block = new fs_block;
+			
+			// set the provided pointer to the newly created block.
+			// this keeps us from having to read the indirect block from disk every time.
+			disk->read(inode->indirect, (*indirect_block)->data);
+		}
+		(*indirect_block)->pointers[block_index - POINTERS_PER_INODE] = new_block;
+	}
+
+	return new_block;
 }
 
 int INE5412_FS::find_free_iblock() {
@@ -408,3 +471,22 @@ int INE5412_FS::find_free_iblock() {
 	// No free block found
 	return 0;
 }
+
+INE5412_FS::fs_block INE5412_FS::read_block(INE5412_FS::fs_inode* inode, int offset, int** indirect_block_ptr) {
+        int blockIndex = offset / Disk::DISK_BLOCK_SIZE;
+        int blockNum = (blockIndex < POINTERS_PER_INODE)
+                        ? inode->direct[blockIndex]
+                        : inode->indirect;
+        
+        if (blockIndex >= POINTERS_PER_INODE) {
+            if (!(*indirect_block_ptr)) {
+                fs_block indirect = read_block(inode->indirect);
+                *indirect_block_ptr = new int[POINTERS_PER_BLOCK];
+                for (int i = 0; i < POINTERS_PER_BLOCK; ++i)
+                  (*indirect_block_ptr)[i] = indirect.pointers[i];
+            }
+            return read_block((*indirect_block_ptr)[blockIndex - POINTERS_PER_INODE]);
+        }
+        
+        return read_block(blockNum);
+    }

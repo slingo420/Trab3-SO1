@@ -52,8 +52,7 @@ public:
     void fs_debug();
     int  fs_format();
     int  fs_mount();
-    int  fs_umount()
-;
+    int  fs_umount();
     int  fs_create();
     int  fs_delete(int inumber);
     int  fs_getsize(int inumber);
@@ -68,50 +67,67 @@ private:
     bool mounted = false;
     vector<bool> free_blocks;
 
-
+    /**
+     * Find if inumber is valid
+    */
     bool inumber_is_valid(int inumber) {
         return inumber > 0 && inumber <= superblock.ninodes;
     }
 
+    /**
+     * Find block in which inode is stored
+    */
     int find_inode_block(int inumber) {
         return 1 + (inumber - 1) / INODES_PER_BLOCK;
     }
 
+    /**
+     * Find inode position inside a block.
+    */
     int find_inode_offset(int inumber) {
         return (inumber - 1) % INODES_PER_BLOCK;
     }
 
+    /**
+     * Given a block number, read it from the disk.
+    */
     fs_block read_block(int blocknum) {
         fs_block block;
         this->disk->read(blocknum, block.data);
         return block;
     }
 
-    fs_block read_block(fs_inode* inode, int offset, int** indirect_block_ptr) {
-        int blockIndex = offset / Disk::DISK_BLOCK_SIZE;
-        int blockNum = (blockIndex < POINTERS_PER_INODE)
-                        ? inode->direct[blockIndex]
-                        : inode->indirect;
-        
-        if (blockIndex >= POINTERS_PER_INODE) {
-            if (!(*indirect_block_ptr)) {
-                fs_block indirect = read_block(inode->indirect);
-                *indirect_block_ptr = new int[POINTERS_PER_BLOCK];
-                for (int i = 0; i < POINTERS_PER_BLOCK; ++i)
-                  (*indirect_block_ptr)[i] = indirect.pointers[i];
-            }
-            return read_block((*indirect_block_ptr)[blockIndex - POINTERS_PER_INODE]);
-        }
-        
-        return read_block(blockNum);
-    }
+    /**
+     * Given an inode and an offset inside it, read the block defined by the offset.
+     * If an indirect block is necessary and indirect_block_ptr is null, read it from disk and write to indirect_block_ptr,
+     * else read the indirect block from the pointer.
+    */
+    fs_block read_block(fs_inode* inode, int offset, int** indirect_block_ptr);
 
     optional<pair<int,fs_block>> find_free_inode();
 
+    /**
+     * Find if disk can be used by other functions besides debug, mount and format.
+    */
     bool is_usable();
     bool is_usable(int inumber);
 
+    /**
+     * Find free block on the disk and return it's number.
+    */
     int find_free_iblock();
+
+    /**
+     * Allocate a block used to store data.
+     * If an indirect block is necessary and indirect_block is null, read it from disk and write to indirect_block,
+     * else read the indirect block from the pointer.
+    */
+    int allocate_data_block(fs_inode *inode, int block_index, fs_block **indirect_block);
+    
+    /**
+     * Allocate indirect block to inode.
+    */
+    int allocate_indirect_block(fs_inode *inode);
 };
 
 #endif
