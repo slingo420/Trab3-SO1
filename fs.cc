@@ -169,7 +169,10 @@ bool INE5412_FS::is_usable(int inumber) {
 }
 
 int INE5412_FS::fs_create() {
-  if (!is_usable()) return 0;  // Return failure
+  if (!is_usable()) {
+    cout << "Error: Disk not mounted\n";
+    return 0;  // Return failure
+  }
 
   // Find a free inode
   auto result = find_free_inode();
@@ -217,7 +220,10 @@ optional<pair<int, INE5412_FS::fs_block>> INE5412_FS::find_free_inode() {
 }
 
 int INE5412_FS::fs_delete(int inumber) {
-  if (!is_usable(inumber)) return 0;
+  if (!is_usable()) {
+    cout << "Error: Disk not mounted or invalid inumber\n";
+    return 0;  // Return failure
+  }
 
   // Read the inode block containing the target inode
   fs_block inodeBlock = read_block(find_inode_block(inumber));
@@ -257,7 +263,10 @@ int INE5412_FS::fs_delete(int inumber) {
 }
 
 int INE5412_FS::fs_getsize(int inumber) {
-  if (!is_usable(inumber)) return 0;
+  if (!is_usable()) {
+    cout << "Error: Disk not mounted or invalid inumber\n";
+    return 0;  // Return failure
+  }
 
   // Read the inode block containing the target inode
   fs_block inodeBlock = read_block(find_inode_block(inumber));
@@ -274,7 +283,10 @@ int INE5412_FS::fs_getsize(int inumber) {
 }
 
 int INE5412_FS::fs_read(int inumber, char *data, int length, int offset) {
-  if (!is_usable(inumber)) return 0;
+  if (!is_usable()) {
+    cout << "Error: Disk not mounted or invalid inumber\n";
+    return 0;  // Return failure
+  }
 
   // Read the inode block containing the target inode
   fs_block inodeBlock = read_block(find_inode_block(inumber));
@@ -317,7 +329,10 @@ int INE5412_FS::fs_read(int inumber, char *data, int length, int offset) {
 
 int INE5412_FS::fs_write(int inumber, const char *data, int length,
                          int offset) {
-  if (!is_usable(inumber)) return 0;
+  if (!is_usable()) {
+    cout << "Error: Disk not mounted or invalid inumber\n";
+    return 0;  // Return failure
+  }
 
   // Read the inode block containing the target inode
   fs_block inodeBlock = read_block(find_inode_block(inumber));
