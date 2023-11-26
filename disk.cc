@@ -59,7 +59,6 @@ void Disk::read(int blocknum, char *data )
 
 void Disk::write(int blocknum, const char *data)
 {
-	cout << "Write: " << blocknum << '\n'; 
 	sanity_check(blocknum, data);
 
     fseek(diskfile,blocknum*DISK_BLOCK_SIZE,SEEK_SET);

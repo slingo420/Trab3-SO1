@@ -49,6 +49,15 @@ void INE5412_FS::fs_debug()
  	cout << spaces << block.super.nblocks << " blocks\n";
 	cout << spaces << block.super.ninodeblocks << " inode blocks\n";
 	cout << spaces << block.super.ninodes << " inodes\n";
+	
+	if (mounted) {
+		cout << '\n' << "free blocks: ";
+		for (size_t i = 0; i < free_blocks.size(); ++i)
+			if (free_blocks[i])
+				cout << i << ' ';
+		cout << '\n';
+	}
+
 
 	for (int i = 1; i <= this->superblock.ninodeblocks; ++i) {
 		fs_block block = this->read_block(i);
